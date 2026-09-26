@@ -20,6 +20,8 @@ import {
 import "./index.css";
 
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 const FRAMEWORKS = [
   "GDPR",
   "HIPAA",
@@ -117,7 +119,7 @@ function App() {
       formData.append("framework", framework);
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/analyze",
+        `${API_BASE_URL}/api/analyze`,
         {
           method: "POST",
           body: formData,
