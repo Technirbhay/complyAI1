@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,6 +31,10 @@ app.add_middleware(
         # Current Vite frontend
         "http://localhost:5175",
         "http://127.0.0.1:5175",
+        os.getenv(
+            "FRONTEND_ORIGIN",
+            "https://technirbhay.github.io",
+        ).rstrip("/"),
     ],
     allow_credentials=True,
     allow_methods=["*"],

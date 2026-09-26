@@ -3,6 +3,8 @@ uvicorn
 python-multipart
 python-dotenv
 google-genai
+groq
+openai
 pydantic
 pypdf
 python-docx
