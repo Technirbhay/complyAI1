@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ShieldCheck,
   UploadCloud,
@@ -15,12 +15,37 @@ import {
   Sparkles,
   ArrowRight,
   ShieldAlert,
+  Settings,
+  Globe,
 } from "lucide-react";
 
 import "./index.css";
 
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const normalizeApiUrl = (url) => {
+  if (!url) return "";
+  let clean = url.trim().replace(/\/+$/, "");
+  if (clean && !clean.startsWith("http://") && !clean.startsWith("https://")) {
+    clean = `https://${clean}`;
+  }
+  return clean;
+};
+
+const getInitialApiUrl = () => {
+  const saved = localStorage.getItem("complyai_api_url");
+  if (saved && saved.trim()) return normalizeApiUrl(saved);
+
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim()) {
+    return normalizeApiUrl(envUrl);
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8000";
+  }
+
+  return "https://complyai-backend.onrender.com";
+};
 
 const FRAMEWORKS = [
   "GDPR",
@@ -34,12 +59,64 @@ const FRAMEWORKS = [
 function App() {
   const inputRef = useRef(null);
 
+  const [apiUrl, setApiUrl] = useState(getInitialApiUrl);
+  const [showSettings, setShowSettings] = useState(false);
+  const [tempApiUrl, setTempApiUrl] = useState(apiUrl);
+  const [backendStatus, setBackendStatus] = useState("checking");
+
   const [file, setFile] = useState(null);
   const [framework, setFramework] = useState("GDPR");
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setBackendStatus("checking");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    fetch(`${apiUrl}/api/health`, { signal: controller.signal })
+      .then((res) => {
+        clearTimeout(timeoutId);
+        if (isMounted) {
+          if (res.ok) setBackendStatus("online");
+          else setBackendStatus("error");
+        }
+      })
+      .catch(() => {
+        clearTimeout(timeoutId);
+        if (isMounted) {
+          setBackendStatus("sleeping");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [apiUrl]);
+
+  const saveApiUrl = (e) => {
+    e.preventDefault();
+    const clean = normalizeApiUrl(tempApiUrl);
+    if (!clean) return;
+    localStorage.setItem("complyai_api_url", clean);
+    setApiUrl(clean);
+    setShowSettings(false);
+  };
+
+  const resetApiUrl = () => {
+    localStorage.removeItem("complyai_api_url");
+    const defaultUrl = import.meta.env.DEV
+      ? "http://127.0.0.1:8000"
+      : normalizeApiUrl(import.meta.env.VITE_API_BASE_URL) || "https://complyai-backend.onrender.com";
+    setApiUrl(defaultUrl);
+    setTempApiUrl(defaultUrl);
+    setShowSettings(false);
+  };
 
 
   const stats = useMemo(() => {
@@ -119,7 +196,7 @@ function App() {
       formData.append("framework", framework);
 
       const response = await fetch(
-        `${API_BASE_URL}/api/analyze`,
+        `${apiUrl}/api/analyze`,
         {
           method: "POST",
           body: formData,
@@ -136,10 +213,22 @@ function App() {
 
       setReport(data);
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to connect to ComplyAI backend."
-      );
+      const isNetworkError =
+        err.name === "TypeError" ||
+        err.message?.toLowerCase().includes("fetch") ||
+        err.message?.toLowerCase().includes("failed to fetch") ||
+        err.message?.toLowerCase().includes("networkerror");
+
+      if (isNetworkError) {
+        setError(
+          `Unable to connect to backend (${apiUrl}). If using Render's free tier, the backend spins down when idle and takes ~45 seconds to wake up. Please wait 30 seconds and retry, or configure your Backend URL via the top button.`
+        );
+      } else {
+        setError(
+          err.message ||
+            "Unable to connect to ComplyAI backend."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -248,12 +337,61 @@ function App() {
             </p>
           </div>
 
-          <div className="top-status">
-            <span className="pulse"></span>
-            AI ENGINE ONLINE
+          <div className="topbar-actions">
+            <div
+              className={`top-status ${backendStatus}`}
+              title={`Target API: ${apiUrl}`}
+            >
+              <span className={`pulse ${backendStatus}`}></span>
+              {backendStatus === "online"
+                ? "AI ENGINE ONLINE"
+                : backendStatus === "sleeping"
+                ? "BACKEND SLEEPING"
+                : backendStatus === "checking"
+                ? "CONNECTING..."
+                : "BACKEND OFFLINE"}
+            </div>
+
+            <button
+              className="api-config-button"
+              type="button"
+              onClick={() => {
+                setTempApiUrl(apiUrl);
+                setShowSettings((prev) => !prev);
+              }}
+              title="Configure Backend API URL"
+            >
+              <Settings size={14} />
+              <span>API URL</span>
+            </button>
           </div>
 
         </header>
+
+        {showSettings && (
+          <div className="api-settings-panel">
+            <form onSubmit={saveApiUrl} className="api-settings-form">
+              <div className="api-settings-header">
+                <Globe size={16} />
+                <strong>Backend API Configuration</strong>
+              </div>
+              <p className="api-settings-desc">
+                Current API URL: <code>{apiUrl}</code>. Enter your Render backend URL below if deploying custom endpoints:
+              </p>
+              <div className="api-input-group">
+                <input
+                  type="text"
+                  value={tempApiUrl}
+                  onChange={(e) => setTempApiUrl(e.target.value)}
+                  placeholder="https://complyai-backend.onrender.com"
+                  className="api-input"
+                />
+                <button type="submit" className="api-save-btn">Save</button>
+                <button type="button" onClick={resetApiUrl} className="api-reset-btn">Reset</button>
+              </div>
+            </form>
+          </div>
+        )}
 
 
         <section className="hero-grid">

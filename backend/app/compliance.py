@@ -28,29 +28,46 @@ openai_client = None
 gemini_client = None
 
 
-if GROQ_API_KEY:
-    groq_client = Groq(
-        api_key=GROQ_API_KEY
-    )
+def init_clients():
+    """
+    Safely initialize or re-check AI clients if API keys are present.
+    Allows the server to boot up and serve healthchecks even if keys
+    are configured later in Render environment settings.
+    """
+    global groq_client, openai_client, gemini_client, GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
+
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+    if GROQ_API_KEY and not groq_client:
+        try:
+            groq_client = Groq(api_key=GROQ_API_KEY)
+            print("[AI ROUTER] Groq client initialized.")
+        except Exception as exc:
+            print(f"[AI ROUTER] Failed to initialize Groq: {exc}")
+
+    if OPENAI_API_KEY and not openai_client:
+        try:
+            openai_client = OpenAI(api_key=OPENAI_API_KEY)
+            print("[AI ROUTER] OpenAI client initialized.")
+        except Exception as exc:
+            print(f"[AI ROUTER] Failed to initialize OpenAI: {exc}")
+
+    if GEMINI_API_KEY and not gemini_client:
+        try:
+            gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+            print("[AI ROUTER] Gemini client initialized.")
+        except Exception as exc:
+            print(f"[AI ROUTER] Failed to initialize Gemini: {exc}")
 
 
-if OPENAI_API_KEY:
-    openai_client = OpenAI(
-        api_key=OPENAI_API_KEY
-    )
-
-
-if GEMINI_API_KEY:
-    gemini_client = genai.Client(
-        api_key=GEMINI_API_KEY
-    )
-
-
+# Initial attempt at module load time
+init_clients()
 if not GROQ_API_KEY and not OPENAI_API_KEY and not GEMINI_API_KEY:
-    raise RuntimeError(
-        "No AI API key configured. "
-        "Add GROQ_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY "
-        "to backend/.env"
+    print(
+        "[AI ROUTER WARNING] No AI API keys detected in environment (GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY). "
+        "Web service will start normally, but document analysis will require an API key in Render environment settings."
     )
 
 
@@ -771,6 +788,12 @@ def analyze_document(
     framework: str,
     document_text: str,
 ) -> ComplianceReport:
+
+    init_clients()
+    if not groq_client and not openai_client and not gemini_client:
+        raise RuntimeError(
+            "No AI provider is configured on the server. Please add GROQ_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in Render environment settings."
+        )
 
     # --------------------------------------------------------
     # Split document

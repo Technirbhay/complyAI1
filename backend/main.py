@@ -22,20 +22,29 @@ app = FastAPI(
 # CORS
 # ============================================================
 
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://technirbhay.github.io",
+]
+
+frontend_origin_env = os.getenv("FRONTEND_ORIGIN", "")
+if frontend_origin_env:
+    for origin in frontend_origin_env.split(","):
+        cleaned = origin.strip().rstrip("/")
+        if cleaned and cleaned not in allowed_origins:
+            allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-
-        # Current Vite frontend
-        "http://localhost:5175",
-        "http://127.0.0.1:5175",
-        os.getenv(
-            "FRONTEND_ORIGIN",
-            "https://technirbhay.github.io",
-        ).rstrip("/"),
-    ],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,10 +71,19 @@ def root():
 
 @app.get("/api/health")
 def health():
+    configured_providers = []
+    if os.getenv("GROQ_API_KEY"):
+        configured_providers.append("Groq")
+    if os.getenv("GEMINI_API_KEY"):
+        configured_providers.append("Gemini")
+    if os.getenv("OPENAI_API_KEY"):
+        configured_providers.append("OpenAI")
 
     return {
         "status": "healthy",
-        "service": "ComplyAI API"
+        "service": "ComplyAI API",
+        "ai_ready": len(configured_providers) > 0,
+        "configured_providers": configured_providers
     }
 
 

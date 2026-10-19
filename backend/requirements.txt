@@ -8,3 +8,6 @@ openai
 pydantic
 pypdf
 python-docx
+requests
+beautifulsoup4
+reportlab

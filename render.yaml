@@ -1,4 +1,7 @@
 services:
+  # ------------------------------------------------------------
+  # FastAPI Backend Service
+  # ------------------------------------------------------------
   - type: web
     name: complyai-backend
     runtime: python
@@ -12,3 +15,28 @@ services:
         value: https://technirbhay.github.io
       - key: GROQ_API_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+  # ------------------------------------------------------------
+  # Vite React Frontend Static Site
+  # ------------------------------------------------------------
+  - type: web
+    name: complyai-frontend
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: complyai-backend
+          property: host
